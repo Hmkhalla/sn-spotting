@@ -13,10 +13,49 @@ import torch
 import logging
 import json
 
-from SoccerNet.Downloader import getListGames
+#from SoccerNet.Downloader import getListGames
+import SoccerNet.Downloader as scntdownload
 from SoccerNet.Downloader import SoccerNetDownloader
 from SoccerNet.Evaluation.utils import AverageMeter, EVENT_DICTIONARY_V2, INVERSE_EVENT_DICTIONARY_V2
 from SoccerNet.Evaluation.utils import EVENT_DICTIONARY_V1, INVERSE_EVENT_DICTIONARY_V1
+EVENT_DICTIONARY_V3 = {"comments":0}
+INVERSE_EVENT_DICTIONARY_V3 = {0: "comments"}
+
+MISSING_GAMES = {
+"france_ligue-1/2015-2016/2015-09-26 - 18-30 Nantes 1 - 4 Paris SG",
+"france_ligue-1/2015-2016/2015-11-07 - 19-00 Paris SG 5 - 0 Toulouse",
+"france_ligue-1/2015-2016/2015-09-19 - 18-30 Reims 1 - 1 Paris SG",
+"france_ligue-1/2016-2017/2016-08-12 - 21-00 Bastia 0 - 1 Paris SG",
+"france_ligue-1/2016-2017/2016-09-16 - 21-45 Caen 0 - 6 Paris SG",
+"france_ligue-1/2016-2017/2016-09-23 - 21-45 Toulouse 2 - 0 Paris SG",
+"france_ligue-1/2016-2017/2016-10-01 - 18-00 Paris SG 2 - 0 Bordeaux",
+"france_ligue-1/2016-2017/2016-10-15 - 18-00 Nancy 1 - 2 Paris SG",
+"france_ligue-1/2016-2017/2016-10-28 - 21-45 Lille 0 - 1 Paris SG",
+"france_ligue-1/2016-2017/2016-11-06 - 22-45 Paris SG 4 - 0 Rennes",
+"france_ligue-1/2016-2017/2016-11-19 - 19-00 Paris SG 2 - 0 Nantes",
+"france_ligue-1/2016-2017/2016-11-27 - 22-45 Lyon 1 - 2 Paris SG",
+"france_ligue-1/2016-2017/2016-12-11 - 22-45 Paris SG 2 - 2 Nice",
+"france_ligue-1/2016-2017/2016-12-17 - 19-00 Guingamp 2 - 1 Paris SG",
+"france_ligue-1/2016-2017/2016-12-21 - 22-50 Paris SG 5 - 0 Lorient",
+"france_ligue-1/2016-2017/2017-02-19 - 23-00 Paris SG 0 - 0 Toulouse",
+"france_ligue-1/2016-2017/2017-04-18 - 19-30 Metz 2 - 3 Paris SG",
+"france_ligue-1/2016-2017/2017-04-22 - 18-00 Paris SG 2 - 0 Montpellier",
+"france_ligue-1/2016-2017/2017-05-06 - 18-00 Paris SG 5 - 0 Bastia",
+"france_ligue-1/2016-2017/2017-05-20 - 22-00 Paris SG 1 - 1 Caen",
+"france_ligue-1/2016-2017/2016-08-21 - 21-45 Paris SG 3 - 0 Metz",
+"france_ligue-1/2016-2017/2016-09-09 - 21-45 Paris SG 1 - 1 St Etienne",
+"france_ligue-1/2016-2017/2016-09-20 - 22-00 Paris SG 3 - 0 Dijon",
+"france_ligue-1/2016-2017/2016-10-23 - 21-45 Paris SG 0 - 0 Marseille",
+"france_ligue-1/2016-2017/2016-12-03 - 19-00 Montpellier 3 - 0 Paris SG",
+"france_ligue-1/2016-2017/2017-03-04 - 19-00 Paris SG 1 - 0 Nancy",
+"france_ligue-1/2016-2017/2017-04-09 - 22-00 Paris SG 4 - 0 Guingamp",
+"france_ligue-1/2016-2017/2016-08-28 - 21-45 Monaco 3 - 1 Paris SG",
+"france_ligue-1/2016-2017/2016-11-30 - 23-00 Paris SG 2 - 0 Angers",
+
+}
+
+def getListGames(*args, **kwargs):
+    return [game for game in scntdownload.getListGames(*args, **kwargs) if game not in MISSING_GAMES]
 
 
 
@@ -51,12 +90,17 @@ class SoccerNetClips(Dataset):
         self.window_size_frame = window_size*framerate
         self.version = version
         if version == 1:
+            self.dict_event = EVENT_DICTIONARY_V1
             self.num_classes = 3
             self.labels="Labels.json"
         elif version == 2:
             self.dict_event = EVENT_DICTIONARY_V2
             self.num_classes = 17
             self.labels="Labels-v2.json"
+        elif version == 3:
+            self.dict_event = EVENT_DICTIONARY_V3
+            self.num_classes = 1
+            self.labels="Labels-v3.json"
 
         logging.info("Checking/Download features and labels locally")
         downloader = SoccerNetDownloader(path)
@@ -99,15 +143,10 @@ class SoccerNetClips(Dataset):
                 seconds = int(time[-2::])
                 frame = framerate * ( seconds + 60 * minutes ) 
 
-                if version == 1:
-                    if "card" in event: label = 0
-                    elif "subs" in event: label = 1
-                    elif "soccer" in event: label = 2
-                    else: continue
-                elif version == 2:
-                    if event not in self.dict_event:
-                        continue
-                    label = self.dict_event[event]
+                
+                if event not in self.dict_event:
+                    continue
+                label = self.dict_event[event]
 
                 # if label outside temporal of view
                 if half == 1 and frame//self.window_size_frame>=label_half1.shape[0]:
@@ -166,6 +205,10 @@ class SoccerNetClipsTesting(Dataset):
             self.dict_event = EVENT_DICTIONARY_V2
             self.num_classes = 17
             self.labels="Labels-v2.json"
+        elif version == 3:
+            self.dict_event = EVENT_DICTIONARY_V3
+            self.num_classes = 1
+            self.labels="Labels-v3.json"
 
         logging.info("Checking/Download features and labels locally")
         downloader = SoccerNetDownloader(path)
@@ -211,15 +254,10 @@ class SoccerNetClipsTesting(Dataset):
                 seconds = int(time[-2::])
                 frame = self.framerate * ( seconds + 60 * minutes ) 
 
-                if self.version == 1:
-                    if "card" in event: label = 0
-                    elif "subs" in event: label = 1
-                    elif "soccer" in event: label = 2
-                    else: continue
-                elif self.version == 2:
-                    if event not in self.dict_event:
-                        continue
-                    label = self.dict_event[event]
+                
+                if event not in self.dict_event:
+                    continue
+                label = self.dict_event[event]
 
                 value = 1
                 if "visibility" in annotation.keys():
